@@ -1,101 +1,88 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
-	htmltemplate "html/template"
-	"io"
+	"log/slog"
 	"net/http"
 	"os"
-	texttemplate "text/template"
+	"sync"
 
-	_ "embed" // Embed templates
+	"github.com/AlexGustafsson/grapevine/internal/api"
+	"github.com/AlexGustafsson/grapevine/internal/web"
+	"github.com/AlexGustafsson/grapevine/internal/webpush"
 )
 
-//go:embed manifest.json.gotmpl
-var manifestjson string
-
-var manifestjsonTemplate = texttemplate.Must(texttemplate.New("name").Parse(manifestjson))
-
-type ManifestData struct {
-	ID        string
-	Name      string
-	ShortName string
-	Icon      string
-	StartURL  string
-}
-
-//go:embed index.html.gotmpl
-var indexhtml string
-
-var indexhtmlTemplate = htmltemplate.Must(htmltemplate.New("name").Parse(indexhtml))
-
-type IndexData struct {
-	ManifestPath string
-}
-
-// NOTE: This is a PoC, there's a lot of unsafe code in this file
 func main() {
-	mux := http.NewServeMux()
+	// TODO: Read from file
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		slog.Error("Failed to generate keys", slog.Any("error", err))
+		os.Exit(1)
+	}
 
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		indexhtmlTemplate.Execute(w, IndexData{
-			ManifestPath: "/manifest.json",
-		})
+	keyExchangeKey, err := signingKey.ECDH()
+	if err != nil {
+		slog.Error("Failed to generate keys", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	fmt.Println("client pk", webpush.NewClient("https://example.com", signingKey, keyExchangeKey).PublicKeyString())
+
+	clients := map[string]webpush.Client{
+		"grapevine": webpush.NewClient("https://example.com", signingKey, keyExchangeKey),
+	}
+
+	webPushAPI := &api.WebPushAPI{
+		Clients:       clients,
+		Subscriptions: make(map[string]map[string]webpush.Subscription),
+	}
+
+	publicMux := http.NewServeMux()
+	publicMux.Handle("/api/v1/", api.NewPublicServer(webPushAPI))
+	publicMux.Handle("/", web.NewServer(clients))
+
+	publicServer := &http.Server{
+		Addr:    ":8080",
+		Handler: publicMux,
+	}
+
+	internalMux := http.NewServeMux()
+	internalMux.Handle("/api/v1/", api.NewPrivateServer(webPushAPI))
+
+	internalServer := &http.Server{
+		Addr:    ":8081",
+		Handler: internalMux,
+	}
+
+	var wg sync.WaitGroup
+	failed := false
+
+	// TODO: Error handling, cancellation
+	wg.Go(func() {
+		err := publicServer.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			slog.Error("Failed to serve public endpoint", slog.Any("error", err))
+			// Close the other server
+			internalServer.Close()
+			failed = true
+		}
 	})
 
-	mux.HandleFunc("GET /index.html", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		indexhtmlTemplate.Execute(w, IndexData{
-			ManifestPath: "/manifest.json",
-		})
+	wg.Go(func() {
+		err := internalServer.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			slog.Error("Failed to serve internal endpoint", slog.Any("error", err))
+			// Close the other server
+			publicServer.Close()
+			failed = true
+		}
 	})
 
-	mux.HandleFunc("GET /manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		manifestjsonTemplate.Execute(w, ManifestData{
-			ID:        "grapevine",
-			ShortName: "Grapevine",
-			Name:      "Grapevine",
-			Icon:      "/grapevine.png",
-			StartURL:  "/",
-		})
-	})
-
-	mux.HandleFunc("GET /grapevine.png", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		f, _ := os.OpenFile("grapevine.png", os.O_RDONLY, 0)
-		defer f.Close()
-		io.Copy(w, f)
-	})
-
-	mux.HandleFunc("GET /{name}/index.html", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		name := r.PathValue("name")
-		indexhtmlTemplate.Execute(w, IndexData{
-			ManifestPath: fmt.Sprintf("/%s/manifest.json", name),
-		})
-	})
-
-	mux.HandleFunc("GET /{name}/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		name := r.PathValue("name")
-		manifestjsonTemplate.Execute(w, ManifestData{
-			ID:        name,
-			ShortName: name,
-			Name:      name,
-			Icon:      fmt.Sprintf("/%s/icon.png", name),
-			StartURL:  fmt.Sprintf("/%s", name),
-		})
-	})
-
-	mux.HandleFunc("GET /{name}/icon.png", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		name := r.PathValue("name")
-		f, _ := os.OpenFile(fmt.Sprintf("%s.png", name), os.O_RDONLY, 0) // Lord forgive me for my sins
-		defer f.Close()
-		io.Copy(w, f)
-	})
-
-	http.ListenAndServe(":8080", mux)
+	wg.Wait()
+	if failed {
+		os.Exit(1)
+	}
 }

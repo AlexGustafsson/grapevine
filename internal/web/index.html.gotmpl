@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <meta name="referrer" content="same-origin" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#fafafa"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#121212"
+    />
+    <link rel="manifest" href="{{ .ManifestPath }}" />
+
+    <title>Grapevine</title>
+  </head>
+
+  <body>
+    <h1>Hello!</h1>
+
+    <button id="subscribe">Subscribe</button>
+    <button id="unsubscribe">Unsubscribe</button>
+
+    <script>
+      const applicationServerKey = "{{ .ApplicationServerKey }}";
+
+      document.addEventListener("DOMContentLoaded", () => {
+        /** @type HTMLButtonElement */
+        const subscribeButton = document.getElementById("subscribe");
+        const unSubscribeButton = document.getElementById("unsubscribe");
+
+        const updateButtons = (subscribed) => {
+          if (subscribed) {
+            subscribeButton.style.display = "none";
+            unSubscribeButton.style.display = "block";
+          } else {
+            subscribeButton.style.display = "block";
+            unSubscribeButton.style.display = "none";
+          }
+        };
+
+        window.pushManager.getSubscription().then((subscription) => {
+          updateButtons(subscription);
+        });
+
+        subscribeButton.addEventListener("click", () => {
+          window.pushManager
+            .subscribe({
+              // MUST be true for declerative web push
+              userVisibleOnly: true,
+              applicationServerKey: applicationServerKey,
+            })
+            .then(async (subscription) => {
+              console.log(subscription);
+
+              const id = await crypto.subtle
+                .digest(
+                  "SHA-256",
+                  new TextEncoder().encode(subscription.endpoint)
+                )
+                .then((x) =>
+                  new Uint8Array(x).toBase64({
+                    alphabet: "base64url",
+                    omitPadding: true,
+                  })
+                );
+
+              const topic = "grapevine";
+              await fetch(`/api/v1/subscriptions/${topic}/${id}`, {
+                method: "post",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  topic: "grapevine",
+                  subscription: JSON.parse(JSON.stringify(subscription)),
+                }),
+              }).then((res) => {
+                console.log(res.status);
+              });
+
+              updateButtons(true);
+            })
+            .catch((error) => {
+              console.error("failed to subscribe", error);
+            });
+        });
+
+        unSubscribeButton.addEventListener("click", () => {
+          window.pushManager.getSubscription().then((subscription) => {
+            if (!subscription) {
+              return;
+            }
+
+            subscription
+              .unsubscribe()
+              .then((ok) => {
+                if (ok) {
+                  updateButtons(false);
+                }
+              })
+              .catch((error) => {
+                console.error("failed to unsubscribe", error);
+              });
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
