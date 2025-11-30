@@ -36,8 +36,10 @@ func main() {
 	}
 
 	webPushAPI := &api.WebPushAPI{
-		Clients:       clients,
-		Subscriptions: make(map[string]map[string]webpush.Subscription),
+		Clients: clients,
+		Subscriptions: map[string]map[string]webpush.Subscription{
+			"default": map[string]webpush.Subscription{},
+		},
 	}
 
 	publicMux := http.NewServeMux()
