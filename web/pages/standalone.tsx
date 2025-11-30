@@ -1,13 +1,23 @@
-import { type JSX, useState } from 'react'
+import { type JSX, useCallback, useState } from 'react'
 import { Notification } from '../components/Notification'
 import { useLocationPathPattern } from '../lib/routing'
+import { useSubscription } from '../lib/api/ApiProvider'
 
 export function StandalonePage(): JSX.Element {
   const pathPatternMatch = useLocationPathPattern('/topics/:topic', 'topic')
   const topic = pathPatternMatch?.topic
 
-  const [subscribed, setSubscribed] = useState(false)
+  const [subscriptionId, subscribe, unsubscribe] = useSubscription()
+
   const [notifications, setNotifications] = useState([])
+
+  const handleSubscribe = useCallback(() => {
+    subscribe()
+  }, [subscribe])
+
+  const handleUnsubscribe = useCallback(() => {
+    unsubscribe()
+  }, [unsubscribe])
 
   if (!topic) {
     return (
@@ -32,7 +42,7 @@ export function StandalonePage(): JSX.Element {
       <div className="flex flex-col gap-y-2 flex-grow max-w-[600px]">
         <h1>Grapevine</h1>
 
-        {subscribed ? (
+        {subscriptionId ? (
           <>
             <h2>Recent</h2>
             <div className="card">
@@ -68,10 +78,13 @@ export function StandalonePage(): JSX.Element {
               <button
                 type="button"
                 className="big w-full danger"
-                onClick={() => setSubscribed(false)}
+                onClick={() => handleUnsubscribe()}
               >
                 Unsubscribe
               </button>
+              <p className="text-sm text-foreground-1-alt">
+                Subscription id: {subscriptionId}
+              </p>
             </div>
           </>
         ) : (
@@ -86,7 +99,7 @@ export function StandalonePage(): JSX.Element {
               <button
                 type="button"
                 className="big w-full primary"
-                onClick={() => setSubscribed(true)}
+                onClick={() => handleSubscribe()}
               >
                 Subscribe
               </button>

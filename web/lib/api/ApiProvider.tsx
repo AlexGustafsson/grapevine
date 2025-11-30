@@ -5,11 +5,9 @@ import {
   use,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from 'react'
-import { useWebPushSubscription } from '../WebPushProvider'
-import type { ApiClient } from './client'
+import { ApiError, type ApiClient } from './client'
 
 const ApiContext = createContext<ApiClient>({} as ApiClient)
 
@@ -38,115 +36,91 @@ async function deriveSubscriptionId(
     )
 }
 
-export function useSubscription() {
-  // const client = useApiClient()
-  // const [subscription, setSubscription] = useState<PushSubscription>()
-  // const subscriptionId = useState<string>()
-  // // Get initial state of the local subscription
-  // useEffect(() => {
-  //   setSubscription(some)
-  // }, [])
-  // // Keep subscription id up-to-date (for end-user verification?)
-  // useEffect(() => {
-  // }, [subscription])
-  // // Upsert the subscription
-  // useEffect(() => {
-  //   if (subscription) {
-  //     deriveSubscriptionId(subscription).then((subscriptionId) => client.createSubscription(window.grapevine.topic, subscriptionId, subscription.toJSON()))
-  //   }
-  // }, [subscription])
-  // useEffect(() => {
-  //   if (subscription) {
-  //     const id = await crypto.subtle
-  //               .digest(
-  //                 "SHA-256",
-  //                 new TextEncoder().encode(subscription.endpoint)
-  //               )
-  //               .then((x) =>
-  //                 new Uint8Array(x).toBase64({
-  //                   alphabet: "base64url",
-  //                   omitPadding: true,
-  //                 })
-  //               );
-  //     client
-  //       .subscribe(window.grapevine.topic, id, subscription.toJSON())
-  //       .then(() => {})
-  //       .catch((error) => {
-  //         console.log('Failed to subscribe', error)
-  //       })
-  //   } else {
-  //   }
-  // }, [subscription])
-  // const subscribe = useCallback(async () => {
-  //   setStatus('subscribing')
-  //   try {
-  //     const subscription = await window.pushManager.subscribe({
-  //       // MUST be true for declerative web push
-  //       userVisibleOnly: true,
-  //       applicationServerKey: window.grapevine.applicationServerKey,
-  //     })
-  //     subscriptionRef.current = subscription
-  //     await client.subscribe(window.grapevine.topic, subscription.toJSON())
-  //     setStatus('subscribed')
-  //   } catch (error) {
-  //     console.error('Failed to subscribe', error)
-  //     if (subscriptionRef.current) {
-  //       try {
-  //         const ok = await subscriptionRef.current.unsubscribe()
-  //         if (ok) {
-  //           setStatus('unsubscribed')
-  //         }
-  //       } catch (error) {
-  //         console.error('Failed to unsubscribe', error)
-  //       }
-  //     } else {
-  //       setStatus('unsubscribed')
-  //     }
-  //   }
-  //   window.pushManager
-  //     .subscribe({
-  //       // MUST be true for declerative web push
-  //       userVisibleOnly: true,
-  //       applicationServerKey: window.grapevine.applicationServerKey,
-  //     })
-  //     .then((subscription) => {
-  //       subscriptionRef.current = subscription
-  //       return client.subscribe(window.grapevine.topic, subscription.toJSON())
-  //     })
-  //     .then(() => {
-  //       setStatus('subscribed')
-  //     })
-  //     .catch((error) => {
-  //       console.error('Failed to subscribe', error)
-  //       if (subscriptionRef.current) {
-  //         subscriptionRef.current
-  //           .unsubscribe()
-  //           .then((ok) => {
-  //             if (!ok) {
-  //               throw new Error('not ok')
-  //             }
-  //             subscriptionRef.current = null
-  //           })
-  //           .catch((error) => {
-  //             console.error('Failed to unsubscribe', error)
-  //           })
-  //           .finally(() => {
-  //             setStatus('unsubscribed')
-  //           })
-  //       } else {
-  //         setStatus('unsubscribed')
-  //       }
-  //     })
-  // }, [client])
-  // const unsubscribe = useCallback(async () => {})
-  // useEffect(() => {
-  //   if (subscription) {
-  //     oldSubscriptionRef.current = subscription
-  //   }
-  // }, [subscription])
-  // useEffect(() => {
-  //   if (subscription) {
-  //   } else {
-  //   }
-  // }, [client, subscription])
+export function useSubscription(): [
+  string | undefined,
+  () => Promise<void>,
+  () => Promise<void>,
+] {
+  const client = useApiClient()
+
+  const [subscription, setSubscription] = useState<PushSubscription>()
+  const [subscriptionId, setSubscriptionId] = useState<string>()
+  const [serverHasSubscription, setServerHasSubscription] = useState(false)
+
+  // Get initial state of the local subscription
+  useEffect(() => {
+    window.pushManager
+      .getSubscription()
+      .then((subscription) => {
+        if (subscription) {
+          setSubscription(subscription)
+          deriveSubscriptionId(subscription)
+            .then((subscriptionId) => {
+              setSubscriptionId(subscriptionId)
+
+              client
+                .subscriptionExists(window.grapevine.topic, subscriptionId)
+                .then(setServerHasSubscription)
+                .catch((error) => {
+                  console.error('Failed to check if subscription exists', error)
+                })
+            })
+            .catch((error) => {
+              console.error('Failed to derive subscription id', error)
+            })
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to identify existing subscription', error)
+      })
+  }, [client])
+
+  // TODO: Error handling
+  const subscribe = useCallback(async () => {
+    const subscription = await window.pushManager.subscribe({
+      // MUST be true for declerative web push
+      userVisibleOnly: true,
+      applicationServerKey: window.grapevine.applicationServerKey,
+    })
+    setSubscription(subscription)
+
+    const subscriptionId = await deriveSubscriptionId(subscription)
+    setSubscriptionId(subscriptionId)
+
+    await client.subscribe(
+      window.grapevine.topic,
+      subscriptionId,
+      subscription.toJSON()
+    )
+  }, [client])
+
+  // TODO: Error handling
+  const unsubscribe = useCallback(async () => {
+    if (serverHasSubscription && subscriptionId) {
+      try {
+        await client.unsubscribe(window.grapevine.topic, subscriptionId)
+        setServerHasSubscription(false)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          // Assume the subscription is already removed
+          setServerHasSubscription(false)
+        } else {
+          console.error('Failed to unsubscribe', error)
+          return
+        }
+      }
+    }
+
+    if (subscription) {
+      const ok = await subscription.unsubscribe()
+      if (!ok) {
+        throw new Error('not ok')
+      }
+
+      setSubscription(undefined)
+      setSubscriptionId(undefined)
+    }
+  }, [client, serverHasSubscription, subscriptionId, subscription])
+
+  return [subscriptionId, subscribe, unsubscribe]
 }
