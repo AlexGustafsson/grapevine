@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/AlexGustafsson/grapevine/internal/state"
 	"github.com/AlexGustafsson/grapevine/internal/webpush"
 )
 
@@ -42,62 +43,67 @@ type API interface {
 var _ API = (*WebPushAPI)(nil)
 
 type WebPushAPI struct {
-	Clients       map[string]webpush.Client
-	Subscriptions map[string]map[string]webpush.Subscription
+	Store *state.Store
 }
 
 // Subscribe implements API.
 func (w *WebPushAPI) Subscribe(ctx context.Context, topic string, id string, subscription webpush.Subscription) error {
-	subscriptions, ok := w.Subscriptions[topic]
-	if !ok {
+	err := w.Store.AddSubscription(topic, id, subscription)
+	if err == state.ErrTopicNotFound {
 		return ErrTopicNotFound
+	} else if err != nil {
+		return err
 	}
 
-	subscriptions[id] = subscription
+	// Could be debounced queue
+	go func() {
+		if err := w.Store.Save(w.Store.BasePath()); err != nil {
+			slog.Error("Failed to save store", slog.Any("error", err))
+		}
+	}()
+
 	return nil
 }
 
 // GetSubsription implements API.
 func (w *WebPushAPI) GetSubsription(ctx context.Context, topic string, id string) (webpush.Subscription, error) {
-	subscriptions, ok := w.Subscriptions[topic]
-	if !ok {
-		return webpush.Subscription{}, ErrTopicNotFound
+	subscription, err := w.Store.GetSubscription(topic, id)
+	switch err {
+	case state.ErrSubscriptionNotFound:
+		return subscription, ErrSubscriptionNotFound
+	case state.ErrTopicNotFound:
+		return subscription, ErrTopicNotFound
+	default:
+		return subscription, err
 	}
-
-	subscription, ok := subscriptions[id]
-	if !ok {
-		return webpush.Subscription{}, ErrSubscriptionNotFound
-	}
-
-	return subscription, nil
 }
 
 // Unsubscribe implements API.
 func (w *WebPushAPI) Unsubscribe(ctx context.Context, topic string, id string) error {
-	subscriptions, ok := w.Subscriptions[topic]
-	if !ok {
+	err := w.Store.DeleteSubscription(topic, id)
+	if err == state.ErrTopicNotFound {
 		return ErrTopicNotFound
-	}
-
-	_, ok = subscriptions[id]
-	if !ok {
+	} else if err == state.ErrSubscriptionNotFound {
 		return ErrSubscriptionNotFound
+	} else if err != nil {
+		return err
 	}
 
-	delete(subscriptions, id)
 	return nil
 }
 
 // Push implements API.
 func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notification) error {
-	client, ok := w.Clients[topic]
+	client, ok := w.Store.Client(topic)
 	if !ok {
 		return ErrTopicNotFound
 	}
 
-	subscriptions, ok := w.Subscriptions[topic]
-	if !ok {
+	subscriptions, err := w.Store.Subscriptions(topic)
+	if err == state.ErrTopicNotFound {
 		return ErrTopicNotFound
+	} else if err != nil {
+		return err
 	}
 
 	if len(subscriptions) == 0 {
@@ -133,7 +139,7 @@ func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notif
 
 		// TODO: Loop over all subscriptions
 		fmt.Printf("%+v\n", subscription)
-		err = client.Push(ctx, target, content, options)
+		err = client.WebPushClient().Push(ctx, target, content, options)
 		if err != nil {
 			pushErrors = append(pushErrors, err)
 		}

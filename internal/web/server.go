@@ -11,7 +11,7 @@ import (
 	"os"
 	texttemplate "text/template"
 
-	"github.com/AlexGustafsson/grapevine/internal/webpush"
+	"github.com/AlexGustafsson/grapevine/internal/state"
 )
 
 //go:embed public
@@ -41,7 +41,7 @@ type Server struct {
 	mux *http.ServeMux
 }
 
-func NewServer(clients map[string]webpush.Client) *Server {
+func NewServer(store *state.Store) *Server {
 	indexTemplate, err := texttemplate.New("").Parse(index)
 	if err != nil {
 		panic(err)
@@ -55,7 +55,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		client, ok := clients["default"]
+		client, ok := store.Client("default")
 		if !ok {
 			// NOTE: The default client should always exist
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -65,7 +65,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		err = indexTemplate.Execute(w, IndexData{
 			ManifestPath:         "/topics/default/manifest.json",
-			ApplicationServerKey: client.PublicKeyString(),
+			ApplicationServerKey: client.WebPushClient().PublicKeyString(),
 			Topic:                "default",
 		})
 		if err != nil {
@@ -77,7 +77,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 	mux.HandleFunc("GET /topics/{topic}", func(w http.ResponseWriter, r *http.Request) {
 		topic := r.PathValue("topic")
 
-		client, ok := clients[topic]
+		client, ok := store.Client(topic)
 		if !ok {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
@@ -86,7 +86,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		err = indexTemplate.Execute(w, IndexData{
 			ManifestPath:         fmt.Sprintf("/topics/%s/manifest.json", url.PathEscape(topic)),
-			ApplicationServerKey: client.PublicKeyString(),
+			ApplicationServerKey: client.WebPushClient().PublicKeyString(),
 			Topic:                url.PathEscape(topic),
 		})
 		if err != nil {
@@ -98,7 +98,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 	mux.HandleFunc("GET /topics/{topic}/manifest.json", func(w http.ResponseWriter, r *http.Request) {
 		topic := r.PathValue("topic")
 
-		_, ok := clients[topic]
+		client, ok := store.Client(topic)
 		if !ok {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
@@ -106,9 +106,9 @@ func NewServer(clients map[string]webpush.Client) *Server {
 
 		w.Header().Set("Content-Type", "application/json")
 		err = manifestTemplate.Execute(w, ManifestData{
-			ID:        topic, // TODO - get from client config
-			ShortName: topic,
-			Name:      topic,
+			ID:        client.Topic(),
+			ShortName: client.ShortName(),
+			Name:      client.Name(),
 			Icon:      fmt.Sprintf("/topics/%s/icon.png", topic),
 			StartURL:  fmt.Sprintf("/topics/%s", topic),
 		})
@@ -121,7 +121,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 	mux.HandleFunc("GET /topics/{topic}/icon.png", func(w http.ResponseWriter, r *http.Request) {
 		topic := r.PathValue("topic")
 
-		_, ok := clients[topic]
+		_, ok := store.Client(topic)
 		if !ok {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return

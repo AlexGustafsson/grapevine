@@ -1,50 +1,48 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"sync"
 
 	"github.com/AlexGustafsson/grapevine/internal/api"
+	"github.com/AlexGustafsson/grapevine/internal/state"
 	"github.com/AlexGustafsson/grapevine/internal/web"
-	"github.com/AlexGustafsson/grapevine/internal/webpush"
+	"github.com/caarlos0/env/v10"
 )
 
+type Config struct {
+	BasePath string `env:"BASE_PATH" envDefault:"./config"`
+}
+
 func main() {
-	// TODO: Read from file
-	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		slog.Error("Failed to generate keys", slog.Any("error", err))
+	var config Config
+	if err := env.ParseWithOptions(&config, env.Options{Prefix: "GRAPEVINE_"}); err != nil {
+		slog.Error("Failed to parse config", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	keyExchangeKey, err := signingKey.ECDH()
-	if err != nil {
-		slog.Error("Failed to generate keys", slog.Any("error", err))
+	slog.Info("Migrating state store")
+	if err := state.Migrate(config.BasePath); err != nil {
+		slog.Error("Failed to migrate state store", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	fmt.Println("client pk", webpush.NewClient("https://example.com", signingKey, keyExchangeKey).PublicKeyString())
-
-	clients := map[string]webpush.Client{
-		"default": webpush.NewClient("https://example.com", signingKey, keyExchangeKey),
+	slog.Info("Loading state store")
+	store, err := state.Load(config.BasePath)
+	if err != nil {
+		slog.Error("Failed to load state store", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	webPushAPI := &api.WebPushAPI{
-		Clients: clients,
-		Subscriptions: map[string]map[string]webpush.Subscription{
-			"default": map[string]webpush.Subscription{},
-		},
+		Store: store,
 	}
 
 	publicMux := http.NewServeMux()
 	publicMux.Handle("/api/v1/", api.NewPublicServer(webPushAPI))
-	publicMux.Handle("/", web.NewServer(clients))
+	publicMux.Handle("/", web.NewServer(store))
 
 	publicServer := &http.Server{
 		Addr:    ":8080",
