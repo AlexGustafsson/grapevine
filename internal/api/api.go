@@ -10,6 +10,11 @@ import (
 	"github.com/AlexGustafsson/grapevine/internal/webpush"
 )
 
+var (
+	ErrTopicNotFound        = errors.New("topic not found")
+	ErrSubscriptionNotFound = errors.New("subscription not found")
+)
+
 type Urgency string
 
 const (
@@ -45,9 +50,9 @@ type WebPushAPI struct {
 func (w *WebPushAPI) Subscribe(ctx context.Context, topic string, id string, subscription webpush.Subscription) error {
 	subscriptions, ok := w.Subscriptions[topic]
 	if !ok {
-		subscriptions = make(map[string]webpush.Subscription)
-		w.Subscriptions[topic] = subscriptions
+		return ErrTopicNotFound
 	}
+
 	subscriptions[id] = subscription
 	return nil
 }
@@ -56,13 +61,12 @@ func (w *WebPushAPI) Subscribe(ctx context.Context, topic string, id string, sub
 func (w *WebPushAPI) GetSubsription(ctx context.Context, topic string, id string) (webpush.Subscription, error) {
 	subscriptions, ok := w.Subscriptions[topic]
 	if !ok {
-		subscriptions = make(map[string]webpush.Subscription)
-		w.Subscriptions[topic] = subscriptions
+		return webpush.Subscription{}, ErrTopicNotFound
 	}
 
 	subscription, ok := subscriptions[id]
 	if !ok {
-		return webpush.Subscription{}, fmt.Errorf("no such subscription")
+		return webpush.Subscription{}, ErrSubscriptionNotFound
 	}
 
 	return subscription, nil
@@ -72,12 +76,12 @@ func (w *WebPushAPI) GetSubsription(ctx context.Context, topic string, id string
 func (w *WebPushAPI) Unsubscribe(ctx context.Context, topic string, id string) error {
 	subscriptions, ok := w.Subscriptions[topic]
 	if !ok {
-		return fmt.Errorf("no such subscription")
+		return ErrTopicNotFound
 	}
 
 	_, ok = subscriptions[id]
 	if !ok {
-		return fmt.Errorf("no such subscription")
+		return ErrSubscriptionNotFound
 	}
 
 	delete(subscriptions, id)
@@ -88,13 +92,12 @@ func (w *WebPushAPI) Unsubscribe(ctx context.Context, topic string, id string) e
 func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notification) error {
 	client, ok := w.Clients[topic]
 	if !ok {
-		return fmt.Errorf("no client for topic")
+		return ErrTopicNotFound
 	}
 
 	subscriptions, ok := w.Subscriptions[topic]
 	if !ok {
-		slog.Warn("Got event for unknown topic", slog.String("topic", topic))
-		return nil
+		return ErrTopicNotFound
 	}
 
 	if len(subscriptions) == 0 {

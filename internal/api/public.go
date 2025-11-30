@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/AlexGustafsson/grapevine/internal/webpush"
@@ -30,16 +30,23 @@ func NewPublicServer(api API) *PublicServer {
 			return
 		}
 
-		endpointDigest := sha256.Sum256([]byte(subscription.Endpoint))
-		id := base64.RawURLEncoding.EncodeToString(endpointDigest[:])
-		fmt.Println(r.PathValue("id"), id)
+		topic := r.PathValue("topic")
+		id := r.PathValue("id")
 
-		if r.PathValue("id") != id {
+		endpointDigest := sha256.Sum256([]byte(subscription.Endpoint))
+		expectedID := base64.RawURLEncoding.EncodeToString(endpointDigest[:])
+
+		if id != expectedID {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 
-		if err := api.Subscribe(r.Context(), r.PathValue("topic"), id, subscription); err != nil {
+		err := api.Subscribe(r.Context(), topic, id, subscription)
+		if err == ErrTopicNotFound {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		} else if err != nil {
+			slog.Error("Failed to subscribe", slog.Any("error", err))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
@@ -59,7 +66,14 @@ func NewPublicServer(api API) *PublicServer {
 		// }
 
 		_, err := api.GetSubsription(r.Context(), r.PathValue("topic"), id)
-		if err != nil {
+		if err == ErrTopicNotFound {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		} else if err == ErrSubscriptionNotFound {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		} else if err != nil {
+			slog.Error("Failed to get subscription", slog.Any("error", err))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
@@ -68,6 +82,7 @@ func NewPublicServer(api API) *PublicServer {
 	})
 
 	mux.HandleFunc("DELETE /api/v1/subscriptions/{topic}/{id}", func(w http.ResponseWriter, r *http.Request) {
+		topic := r.PathValue("topic")
 		id := r.PathValue("id")
 
 		// TODO: Proof of ownership of the auth secret used for registering the
@@ -78,7 +93,15 @@ func NewPublicServer(api API) *PublicServer {
 		// 	return
 		// }
 
-		if err := api.Unsubscribe(r.Context(), r.PathValue("topic"), id); err != nil {
+		err := api.Unsubscribe(r.Context(), topic, id)
+		if err == ErrTopicNotFound {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		} else if err == ErrSubscriptionNotFound {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		} else if err != nil {
+			slog.Error("Failed to unsubscribe", slog.Any("error", err))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
