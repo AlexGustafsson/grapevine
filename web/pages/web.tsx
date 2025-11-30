@@ -41,7 +41,7 @@ export function WebPage(): JSX.Element {
         ) : (
           <>
             <div className="card items-center gap-y-2">
-              <p>Selecting a topic</p>
+              <p>Select a topic</p>
               <p className="text-foreground-1-alt text-center">
                 Grapevine groups notifications into topics. You need to select a
                 topic before continuing.
