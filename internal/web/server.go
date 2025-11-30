@@ -23,6 +23,7 @@ var index string
 type IndexData struct {
 	ManifestPath         string
 	ApplicationServerKey string
+	Topic                string
 }
 
 //go:embed manifest.json.gotmpl
@@ -65,6 +66,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 		err = indexTemplate.Execute(w, IndexData{
 			ManifestPath:         "/topics/default/manifest.json",
 			ApplicationServerKey: client.PublicKeyString(),
+			Topic:                "default",
 		})
 		if err != nil {
 			slog.Error("Failed to render index.html", slog.Any("error", err))
@@ -85,6 +87,7 @@ func NewServer(clients map[string]webpush.Client) *Server {
 		err = indexTemplate.Execute(w, IndexData{
 			ManifestPath:         fmt.Sprintf("/topics/%s/manifest.json", url.PathEscape(topic)),
 			ApplicationServerKey: client.PublicKeyString(),
+			Topic:                url.PathEscape(topic),
 		})
 		if err != nil {
 			slog.Error("Failed to render index.html", slog.Any("error", err))
