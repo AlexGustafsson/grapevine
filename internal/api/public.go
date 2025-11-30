@@ -55,6 +55,7 @@ func NewPublicServer(api API) *PublicServer {
 	})
 
 	mux.HandleFunc("HEAD /api/v1/subscriptions/{topic}/{id}", func(w http.ResponseWriter, r *http.Request) {
+		topic := r.PathValue("topic")
 		id := r.PathValue("id")
 
 		// TODO: Proof of ownership of the auth secret used for registering the
@@ -65,7 +66,7 @@ func NewPublicServer(api API) *PublicServer {
 		// 	return
 		// }
 
-		_, err := api.GetSubsription(r.Context(), r.PathValue("topic"), id)
+		_, err := api.GetSubsription(r.Context(), topic, id)
 		if err == ErrTopicNotFound {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
@@ -78,7 +79,7 @@ func NewPublicServer(api API) *PublicServer {
 			return
 		}
 
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 	})
 
 	mux.HandleFunc("DELETE /api/v1/subscriptions/{topic}/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -115,5 +116,6 @@ func NewPublicServer(api API) *PublicServer {
 }
 
 func (s *PublicServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// TODO: Use http.CrossOriginProtection
 	s.mux.ServeHTTP(w, r)
 }

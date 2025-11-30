@@ -89,6 +89,13 @@ func (w *WebPushAPI) Unsubscribe(ctx context.Context, topic string, id string) e
 		return err
 	}
 
+	// Could be debounced queue
+	go func() {
+		if err := w.Store.Save(w.Store.BasePath()); err != nil {
+			slog.Error("Failed to save store", slog.Any("error", err))
+		}
+	}()
+
 	return nil
 }
 
@@ -99,7 +106,7 @@ func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notif
 		return ErrTopicNotFound
 	}
 
-	subscriptions, err := w.Store.Subscriptions(topic)
+	subscriptions, err := w.Store.GetSubscriptions(topic)
 	if err == state.ErrTopicNotFound {
 		return ErrTopicNotFound
 	} else if err != nil {
@@ -118,12 +125,23 @@ func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notif
 			return err
 		}
 
+		t := true
 		message := webpush.DeclerativePushMessage{
 			WebPush: 8030,
 			Notification: webpush.DeclerativePushNotification{
-				Title:    notification.Title,
-				Navigate: "https://example.com", // TODO: Get from subscription - must match
+				Title:              notification.Title,
+				Navigate:           "https://example.com", // TODO: Get from subscription - must match
+				Body:               "Test!",
+				RequireInteraction: &t,
+				Actions: []webpush.DeclerativePushNotificationAction{
+					{
+						Action:   "Test",
+						Title:    "Test T",
+						Navigate: "https://example.com/action",
+					},
+				},
 			},
+			// AppBadge: 1, // Works
 		}
 
 		content, err := json.Marshal(&message)

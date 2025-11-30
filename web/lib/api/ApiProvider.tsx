@@ -92,6 +92,7 @@ export function useSubscription(): [
       subscriptionId,
       subscription.toJSON()
     )
+    setServerHasSubscription(true)
   }, [client])
 
   // TODO: Error handling

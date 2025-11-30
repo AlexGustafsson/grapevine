@@ -260,7 +260,7 @@ func (s *Store) DeleteSubscription(topic string, id string) error {
 	return nil
 }
 
-func (s *Store) Subscriptions(topic string) ([]webpush.Subscription, error) {
+func (s *Store) GetSubscriptions(topic string) ([]webpush.Subscription, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -324,7 +324,7 @@ func readJSON(path string, v any) error {
 }
 
 func writeJSON(path string, v any) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
