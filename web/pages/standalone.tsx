@@ -1,10 +1,31 @@
 import { type JSX, useState } from 'react'
 import { Notification } from '../components/Notification'
+import { useLocationPathPattern } from '../lib/routing'
 
 export function StandalonePage(): JSX.Element {
-  const [topic, setTopic] = useState('all')
+  const pathPatternMatch = useLocationPathPattern('/topics/:topic', 'topic')
+  const topic = pathPatternMatch?.topic
+
   const [subscribed, setSubscribed] = useState(false)
   const [notifications, setNotifications] = useState([])
+
+  if (!topic) {
+    return (
+      <div className="flex justify-center px-2 py-10">
+        <div className="flex flex-col gap-y-2 flex-grow max-w-[600px]">
+          <h1>Grapevine</h1>
+          <div className="card">
+            <p className="text-center">Invalid topic</p>
+            <p className="text-center text-foreground-1-alt">
+              You've added the web app to your device without specifying a
+              topic. Please delete the app, visit your Grapevine instance and
+              follow the instructions.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex justify-center px-2 py-10">
