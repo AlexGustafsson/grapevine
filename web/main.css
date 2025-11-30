@@ -1,0 +1,160 @@
+@import 'tailwindcss';
+
+@layer base, components, utilities;
+
+@theme {
+  --color-surface-0: #050505;
+  --color-foreground-0: #ffffff;
+
+  --color-surface-1: #17181c;
+  --color-surface-1-hover: #2e2f37;
+  --color-foreground-1: #ffffff;
+  --color-foreground-1-alt: #b7b8c1;
+
+  --color-surface-2: #2e2f37;
+  --color-surface-2-hover: #1f1f24;
+  --color-border-2-hover: #34353a;
+
+  --color-foreground-primary: #2e91ff;
+  --color-foreground-danger: #e04252;
+}
+
+@layer base {
+  html {
+    -webkit-touch-callout: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    padding-bottom: env(safe-area-inset-bottom);
+    font-family:
+      system, -apple-system, '.SFNSText-Regular', 'San Francisco', 'Roboto',
+      'Segoe UI', 'Helvetica Neue', 'Lucida Grande', sans-serif;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus,
+  button:focus,
+  dialog:focus,
+  div:focus,
+  a:focus {
+    outline: none;
+  }
+
+  input,
+  select {
+    background: none;
+  }
+
+  :root {
+    color-scheme: light dark;
+  }
+
+  body {
+    color: var(--color-foreground-0);
+    background-color: var(--color-surface-0);
+  }
+
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-surface-1);
+    border: 1px solid transparent;
+    color: var(--color-foreground-primary);
+    border-radius: 6px;
+    min-width: 30px;
+    min-height: 30px;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0px 8px;
+
+    transition-property:
+      color, background-color, border-color, outline-color,
+      text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via,
+      --tw-gradient-to;
+    transition-timing-function: var(
+      --default-transition-timing-function
+    ); /* cubic-bezier(0.4, 0, 0.2, 1) */
+    transition-duration: var(--default-transition-duration); /* 150ms */
+  }
+
+  button:hover {
+    background-color: #2e2f37;
+  }
+
+  button.big {
+    border-radius: 15px;
+    min-height: 40px;
+  }
+
+  h1 {
+    color: var(--color-foreground-0);
+    font-size: 26px;
+    font-weight: 600;
+  }
+
+  h2 {
+    color: var(--color-foreground-0);
+    font-size: 24px;
+    font-weight: 600;
+  }
+}
+
+@layer components {
+  .card {
+    background-color: var(--color-surface-1);
+    color: var(--color-foreground-1);
+    padding: 15px;
+    border-radius: 26px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card button {
+    background-color: var(--color-surface-2);
+  }
+
+  .card button:hover {
+    background-color: var(--color-surface-2-hover);
+    border-color: var(--color-border-2-hover);
+  }
+
+  .card button.danger {
+    color: var(--color-foreground-danger);
+  }
+
+  ul.card {
+    border-radius: 0px;
+    background: none;
+    padding: 0;
+  }
+
+  ul.card > :first-child {
+    border-top-left-radius: 26px;
+    border-top-right-radius: 26px;
+  }
+
+  ul.card > :last-child {
+    border-bottom-left-radius: 26px;
+    border-bottom-right-radius: 26px;
+  }
+
+  ul.card > :not(:last-child) {
+    border-bottom: 1px solid #343539;
+  }
+
+  ul.card > * {
+    padding: 8px 13px;
+    background-color: var(--color-surface-1);
+
+    transition-property:
+      color, background-color, border-color, outline-color,
+      text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via,
+      --tw-gradient-to;
+    transition-timing-function: var(
+      --default-transition-timing-function
+    ); /* cubic-bezier(0.4, 0, 0.2, 1) */
+    transition-duration: var(--default-transition-duration); /* 150ms */
+  }
+}

@@ -32,7 +32,7 @@ func main() {
 	fmt.Println("client pk", webpush.NewClient("https://example.com", signingKey, keyExchangeKey).PublicKeyString())
 
 	clients := map[string]webpush.Client{
-		"grapevine": webpush.NewClient("https://example.com", signingKey, keyExchangeKey),
+		"default": webpush.NewClient("https://example.com", signingKey, keyExchangeKey),
 	}
 
 	webPushAPI := &api.WebPushAPI{

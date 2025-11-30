@@ -1,100 +1,143 @@
 package web
 
 import (
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	texttemplate "text/template"
 
 	"github.com/AlexGustafsson/grapevine/internal/webpush"
 )
+
+//go:embed public
+var public embed.FS
+
+//go:embed public/index.html
+var index string
+
+type IndexData struct {
+	ManifestPath         string
+	ApplicationServerKey string
+}
+
+//go:embed manifest.json.gotmpl
+var manifest string
+
+type ManifestData struct {
+	ID        string
+	Name      string
+	ShortName string
+	Icon      string
+	StartURL  string
+}
 
 type Server struct {
 	mux *http.ServeMux
 }
 
 func NewServer(clients map[string]webpush.Client) *Server {
+	indexTemplate, err := texttemplate.New("").Parse(index)
+	if err != nil {
+		panic(err)
+	}
+
+	manifestTemplate, err := texttemplate.New("").Parse(manifest)
+	if err != nil {
+		panic(err)
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		client, ok := clients["grapevine"]
+		client, ok := clients["default"]
 		if !ok {
+			// NOTE: The default client should always exist
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		indexhtmlTemplate.Execute(w, IndexData{
-			ManifestPath:         "/manifest.json",
+		err = indexTemplate.Execute(w, IndexData{
+			ManifestPath:         "/topics/default/manifest.json",
 			ApplicationServerKey: client.PublicKeyString(),
 		})
+		if err != nil {
+			slog.Error("Failed to render index.html", slog.Any("error", err))
+			return
+		}
 	})
 
-	mux.HandleFunc("GET /index.html", func(w http.ResponseWriter, r *http.Request) {
-		client, ok := clients["grapevine"]
+	mux.HandleFunc("GET /topics/{topic}", func(w http.ResponseWriter, r *http.Request) {
+		topic := r.PathValue("topic")
+
+		client, ok := clients[topic]
 		if !ok {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		indexhtmlTemplate.Execute(w, IndexData{
-			ManifestPath:         "/manifest.json",
+		err = indexTemplate.Execute(w, IndexData{
+			ManifestPath:         fmt.Sprintf("/topics/%s/manifest.json", url.PathEscape(topic)),
 			ApplicationServerKey: client.PublicKeyString(),
 		})
+		if err != nil {
+			slog.Error("Failed to render index.html", slog.Any("error", err))
+			return
+		}
 	})
 
-	mux.HandleFunc("GET /manifest.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /topics/{topic}/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		topic := r.PathValue("topic")
+
+		_, ok := clients[topic]
+		if !ok {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		manifestjsonTemplate.Execute(w, ManifestData{
-			ID:        "grapevine",
-			ShortName: "Grapevine",
-			Name:      "Grapevine",
-			Icon:      "/grapevine.png",
-			StartURL:  "/",
+		err = manifestTemplate.Execute(w, ManifestData{
+			ID:        topic, // TODO - get from client config
+			ShortName: topic,
+			Name:      topic,
+			Icon:      fmt.Sprintf("/topics/%s/icon.png", topic),
+			StartURL:  fmt.Sprintf("/topics/%s", topic),
 		})
+		if err != nil {
+			slog.Error("Failed to render manifest.json", slog.Any("error", err))
+			return
+		}
 	})
 
-	mux.HandleFunc("GET /grapevine.png", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /topics/{topic}/icon.png", func(w http.ResponseWriter, r *http.Request) {
+		topic := r.PathValue("topic")
+
+		_, ok := clients[topic]
+		if !ok {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+
 		w.Header().Set("Content-Type", "image/png")
-		f, _ := os.OpenFile("grapevine.png", os.O_RDONLY, 0)
+		// TODO - get from client config
+		f, _ := os.OpenFile(fmt.Sprintf("%s.png", topic), os.O_RDONLY, 0) // Lord forgive me for my sins
 		defer f.Close()
 		io.Copy(w, f)
 	})
 
-	mux.HandleFunc("GET /{name}/index.html", func(w http.ResponseWriter, r *http.Request) {
-		client, ok := clients["grapevine"]
-		if !ok {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
+	// Serve public assets
+	assets, err := fs.Sub(public, "public")
+	if err != nil {
+		panic(err)
+	}
 
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		indexhtmlTemplate.Execute(w, IndexData{
-			ManifestPath:         fmt.Sprintf("/%s/manifest.json", r.PathValue("name")),
-			ApplicationServerKey: client.PublicKeyString(),
-		})
-	})
-
-	mux.HandleFunc("GET /{name}/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		name := r.PathValue("name")
-		manifestjsonTemplate.Execute(w, ManifestData{
-			ID:        name,
-			ShortName: name,
-			Name:      name,
-			Icon:      fmt.Sprintf("/%s/icon.png", name),
-			StartURL:  fmt.Sprintf("/%s", name),
-		})
-	})
-
-	mux.HandleFunc("GET /{name}/icon.png", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		name := r.PathValue("name")
-		f, _ := os.OpenFile(fmt.Sprintf("%s.png", name), os.O_RDONLY, 0) // Lord forgive me for my sins
-		defer f.Close()
-		io.Copy(w, f)
-	})
+	mux.Handle("GET /assets/", http.FileServerFS(assets))
 
 	return &Server{
 		mux: mux,
