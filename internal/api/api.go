@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 
 	"github.com/AlexGustafsson/grapevine/internal/state"
@@ -131,17 +130,19 @@ func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notif
 			Notification: webpush.DeclerativePushNotification{
 				Title:              notification.Title,
 				Navigate:           "https://example.com", // TODO: Get from subscription - must match
-				Body:               "Test!",
+				Body:               notification.Body,
 				RequireInteraction: &t,
-				Actions: []webpush.DeclerativePushNotificationAction{
-					{
-						Action:   "Test",
-						Title:    "Test T",
-						Navigate: "https://example.com/action",
-					},
-				},
+				// TODO: Unknown if actions work
+				// Actions: []webpush.DeclerativePushNotificationAction{
+				// 	{
+				// 		Action:   "Test",
+				// 		Title:    "Test T",
+				// 		Navigate: "https://example.com/action",
+				// 	},
+				// },
 			},
-			// AppBadge: 1, // Works
+			// TODO: AppBadge works
+			// AppBadge: 1,
 		}
 
 		content, err := json.Marshal(&message)
@@ -155,8 +156,6 @@ func (w *WebPushAPI) Push(ctx context.Context, topic string, notification *Notif
 			ContentType: "application/notification+json",
 		}
 
-		// TODO: Loop over all subscriptions
-		fmt.Printf("%+v\n", subscription)
 		err = client.WebPushClient().Push(ctx, target, content, options)
 		if err != nil {
 			pushErrors = append(pushErrors, err)

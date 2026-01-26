@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -168,12 +167,6 @@ func (c *client) Push(ctx context.Context, target *PushTarget, content []byte, o
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusCreated {
-		x, err := io.ReadAll(res.Body)
-		if err == nil {
-			fmt.Printf("%s\n", x)
-		}
-		fmt.Println(res.Header)
-
 		// TODO: Parse body and create a proper error
 		// {"reason":"VapidPkHashMismatch"}
 		return fmt.Errorf("unexpected status code: %d", res.StatusCode)
