@@ -18,11 +18,11 @@
     "react-dom": "19.2.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.11",
-    "@tailwindcss/vite": "4.2.2",
+    "@biomejs/biome": "2.4.12",
+    "@tailwindcss/vite": "4.2.3",
     "@types/node": "24.10.1",
-    "prettier": "3.8.2",
-    "tailwindcss": "4.2.2",
+    "prettier": "3.8.3",
+    "tailwindcss": "4.2.3",
     "typescript": "5.9.3",
     "vite": "7.3.1",
     "@typescript/lib-dom": "npm:@types/web@0.0.294"
