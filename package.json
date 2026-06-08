@@ -20,7 +20,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@tailwindcss/vite": "4.3.0",
-    "@types/node": "24.10.1",
+    "@types/node": "25.9.1",
     "prettier": "3.8.3",
     "tailwindcss": "4.3.0",
     "typescript": "5.9.3",
