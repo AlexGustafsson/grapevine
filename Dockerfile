@@ -13,7 +13,7 @@ COPY web web
 RUN --mount=type=cache,target=node_modules \
   npm run build
 
-FROM --platform=${BUILDPLATFORM} golang:1.26.4@sha256:68cb6d68bed024785b69195b89af7ac7a444f27791435f98647edff595aa0479 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.4@sha256:f96cc555eb8db430159a3aa6797cd5bae561945b7b0fe7d0e284c63a3b291609 AS builder
 
 WORKDIR /src
 
