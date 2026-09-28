@@ -18,10 +18,10 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.13",
+    "@biomejs/biome": "2.5.14",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.10.1",
-    "prettier": "3.9.6",
+    "prettier": "3.9.8",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "7.3.1",
