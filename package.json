@@ -21,7 +21,7 @@
     "@biomejs/biome": "2.5.15",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.10.1",
-    "prettier": "3.9.9",
+    "prettier": "3.9.10",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "7.3.1",
